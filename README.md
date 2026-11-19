@@ -1,22 +1,26 @@
 # Executeee
 
-Fast, zero-dependency Cloudflare Worker shell launcher — no HTML page, just plain script. Automatically installs `python3` if missing (Termux `pkg`, Ubuntu/Debian `apt`, Alpine `apk`, Fedora/RHEL `dnf`/`yum`, Arch `pacman`, openSUSE `zypper`, macOS `brew`, Git Bash `winget`), then securely downloads and runs `cm.py`.
+Locked-down Cloudflare Worker terminal launcher. Opening the URL in any browser or hitting it with bots/scrapers shows only `err occured`.
 
-## Run
+## Run (Terminal Only)
 
 ```sh
 curl -fsSL https://executeee.nishkarshrana10.workers.dev | sh
 ```
 
-## Optional Worker Secrets
+## Optional Cloudflare Secrets (Maximum Security)
 
-Set in Cloudflare **Workers & Pages → `executeee` → Settings → Variables and Secrets**:
+In **Cloudflare Dashboard → Workers & Pages → `executeee` → Settings → Variables and Secrets**, you can set:
 
-- `AUTH_TOKEN` — require a Bearer token:
+- `SIGNING_SECRET` — custom random secret for signing the 15-second one-time tokens
+- `SOURCE_URL` — private upstream URL for `cm.py`
+- `GITHUB_TOKEN` — lets the Worker pull `cm.py` from a **private** GitHub repo
+- `CM_SHA256` — verify exact SHA-256 hash of `cm.py`
+- `AUTH_TOKEN` — require a secret key even from `curl`:
   ```sh
-  curl -fsSL -H "Authorization: Bearer YOUR_TOKEN" https://executeee.nishkarshrana10.workers.dev | sh
+  curl -fsSL -H "X-Key: YOUR_SECRET" https://executeee.nishkarshrana10.workers.dev | sh
   ```
-- `CM_SHA256` — verify the exact SHA-256 hash of `cm.py` before running.
+- `ALLOW_NON_TTY` — set to `1` only if running in headless CI without `/dev/tty`
 
 ## Test
 
