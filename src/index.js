@@ -1,33 +1,31 @@
 /**
- * Cloudflare Worker — terminal-only, anti-scraper launcher for cm.py.
+ * Cloudflare Worker — zero-key, terminal-only, anti-scraper launcher for cm.py.
  *
- * - Browsers, link previews, crawlers, and HTTP scrapers receive ONLY: `err occured`
- * - Real terminal execution (`curl -fsSL <worker-url> | sh`) completes a 15-second,
- *   single-use, IP/UA/colo-bound HMAC + SHA-256 handshake, fetches cm.py server-side
- *   (never exposing the upstream URL), auto-installs Python 3 if missing, runs cm.py
- *   in a private 0700 temp directory, and wipes it on exit.
+ * Run:
+ *   curl -fsSL https://executeee.nishkarshrana10.workers.dev | sh
  *
- * Optional Cloudflare Worker Secrets (Settings -> Variables and Secrets):
- *   SIGNING_SECRET — secret key used to sign 15s one-time session tokens (recommended)
- *   SOURCE_URL     — override upstream cm.py URL privately
- *   GITHUB_TOKEN   — GitHub token if hosting cm.py in a private repository
- *   CM_SHA256      — pin exact SHA-256 hash of cm.py
- *   AUTH_TOKEN     — require `Authorization: Bearer <token>` or `X-Key: <token>`
- *   ALLOW_NON_TTY  — set to "1" only if you need to run inside headless CI with no /dev/tty
+ * Behavior:
+ *   - Browsers, link previews, bots, crawlers, scrapers, extra paths, query strings,
+ *     expired tokens, wrong-IP tokens, and replayed tokens all receive ONLY: `err occured`
+ *   - `GET /` (real `curl` only) returns a tiny 10-second, single-use, IP/UA/colo-bound
+ *     HMAC + SHA-256 session loader containing zero installer code and zero upstream URLs.
+ *   - `POST /` (valid one-time session only) fetches `cm.py` server-side (edge-cached),
+ *     auto-installs Python 3 if missing, executes `cm.py` in a private 0700 temp directory
+ *     with `/dev/tty` attached, and deletes the temp directory immediately on exit.
  */
 
-const DEFAULT_SOURCE_URL =
+const UPSTREAM_CM_URL =
   "https://raw.githubusercontent.com/Nishgamerrz/Nish12345678910111.github.io/main/cm.py";
 
 const ERR_TEXT = "err occured\n";
-const TOKEN_TTL_MS = 15_000; // 15 seconds
-const MAX_SCRIPT_BYTES = 1024 * 1024; // 1 MiB
+const SESSION_TTL_MS = 10_000; // 10-second one-time session window
+const MAX_SCRIPT_BYTES = 1024 * 1024; // 1 MiB safety cap
 const RATE_WINDOW_MS = 60_000; // 1 minute
-const RATE_MAX_REQUESTS = 10; // per IP per minute (covers GET + POST handshake)
+const RATE_MAX_REQUESTS = 8; // per IP per minute
 
 const CURL_UA_RE = /^curl\/\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9._-]+)?$/;
 
-// Headers sent by browsers, webviews, link unfurlers, proxies, and browser-based scrapers.
+// Headers present on browsers, webviews, link previews, proxies, and headless scrapers.
 const FORBIDDEN_HEADERS = Object.freeze([
   "sec-fetch-mode",
   "sec-fetch-site",
@@ -46,9 +44,11 @@ const FORBIDDEN_HEADERS = Object.freeze([
   "x-requested-with",
   "purpose",
   "sec-purpose",
+  "x-moz",
+  "from",
 ]);
 
-const BASE_HEADERS = Object.freeze({
+const RESPONSE_HEADERS = Object.freeze({
   "Content-Type": "text/plain; charset=utf-8",
   "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
@@ -60,30 +60,28 @@ const BASE_HEADERS = Object.freeze({
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 });
 
-// Per-isolate replay protection & sliding-window IP rate limiter.
 const usedNonces = new Map(); // nonce -> expiresAt
 const ipHits = new Map(); // ip -> { count, resetAt }
-
 const encoder = new TextEncoder();
 
 function errResponse(isHead = false) {
   return new Response(isHead ? null : ERR_TEXT, {
     status: 403,
-    headers: BASE_HEADERS,
+    headers: RESPONSE_HEADERS,
   });
 }
 
-function okResponse(body, isHead = false) {
-  return new Response(isHead ? null : body, {
+function okResponse(body) {
+  return new Response(body, {
     status: 200,
-    headers: BASE_HEADERS,
+    headers: RESPONSE_HEADERS,
   });
 }
 
 function pruneMaps(now) {
   if (usedNonces.size > 500) {
-    for (const [k, exp] of usedNonces) {
-      if (exp <= now) usedNonces.delete(k);
+    for (const [nonce, exp] of usedNonces) {
+      if (exp <= now) usedNonces.delete(nonce);
     }
   }
   if (ipHits.size > 1000) {
@@ -93,7 +91,7 @@ function pruneMaps(now) {
   }
 }
 
-function checkRateLimit(ip, now) {
+function allowIp(ip, now) {
   pruneMaps(now);
   const entry = ipHits.get(ip);
   if (!entry || entry.resetAt <= now) {
@@ -115,15 +113,15 @@ function getClientIp(request) {
   return request.headers.get("CF-Connecting-IP") || "0.0.0.0";
 }
 
-function getClientBinding(request) {
+function getClientFingerprint(request) {
   const ip = getClientIp(request);
   const ua = request.headers.get("User-Agent") || "";
   const colo = request.cf?.colo || "local";
-  return `${ip}|${ua}|${colo}`;
+  const tls = request.cf?.tlsVersion || "tls";
+  return `${ip}|${ua}|${colo}|${tls}`;
 }
 
-/** Strictly accepts only genuine `curl` CLI requests; rejects browsers, bots, and scrapers. */
-function isGenuineCurlRequest(request) {
+function isGenuineCurl(request) {
   if (request.cf?.botManagement?.verifiedBot === true) {
     return false;
   }
@@ -133,13 +131,12 @@ function isGenuineCurlRequest(request) {
     return false;
   }
 
-  const accept = request.headers.get("Accept") || "";
-  if (accept !== "*/*") {
+  if ((request.headers.get("Accept") || "") !== "*/*") {
     return false;
   }
 
-  for (const header of FORBIDDEN_HEADERS) {
-    if (request.headers.has(header)) {
+  for (const h of FORBIDDEN_HEADERS) {
+    if (request.headers.has(h)) {
       return false;
     }
   }
@@ -159,21 +156,19 @@ function randomHex(byteLength = 16) {
 
 async function sha256Hex(input) {
   const data = typeof input === "string" ? encoder.encode(input) : input;
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return toHex(digest);
+  return toHex(await crypto.subtle.digest("SHA-256", data));
 }
 
-/** Constant-time string comparison using SHA-256 digests. */
 async function timingSafeEqualStr(a, b) {
-  const [hashA, hashB] = await Promise.all([
+  const [ha, hb] = await Promise.all([
     crypto.subtle.digest("SHA-256", encoder.encode(String(a))),
     crypto.subtle.digest("SHA-256", encoder.encode(String(b))),
   ]);
-  const viewA = new Uint8Array(hashA);
-  const viewB = new Uint8Array(hashB);
+  const va = new Uint8Array(ha);
+  const vb = new Uint8Array(hb);
   let diff = 0;
-  for (let i = 0; i < viewA.length; i++) {
-    diff |= viewA[i] ^ viewB[i];
+  for (let i = 0; i < va.length; i++) {
+    diff |= va[i] ^ vb[i];
   }
   return diff === 0;
 }
@@ -186,28 +181,25 @@ async function hmacHex(secret, message) {
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return toHex(sig);
+  return toHex(await crypto.subtle.sign("HMAC", key, encoder.encode(message)));
 }
 
-function getSigningSecret(env, host) {
-  const custom = typeof env?.SIGNING_SECRET === "string" ? env.SIGNING_SECRET.trim() : "";
-  if (custom) return custom;
-  const auth = typeof env?.AUTH_TOKEN === "string" ? env.AUTH_TOKEN.trim() : "";
-  return `executeee-v2-hmac::${host}::${auth}`;
+async function deriveSigningKey(host, fingerprintHash) {
+  return sha256Hex(`executeee-v3::${host}::${fingerprintHash}`);
 }
 
-async function issueHandshake(request, env, host, now) {
-  const exp = now + TOKEN_TTL_MS;
+async function createSession(request, host, now) {
+  const exp = now + SESSION_TTL_MS;
   const nonce = randomHex(16);
   const challenge = randomHex(12);
-  const bindingHash = await sha256Hex(getClientBinding(request));
+  const fpHash = await sha256Hex(getClientFingerprint(request));
+  const key = await deriveSigningKey(host, fpHash);
   const payload = `${exp}.${nonce}.${challenge}`;
-  const sig = await hmacHex(getSigningSecret(env, host), `${payload}.${bindingHash}`);
+  const sig = await hmacHex(key, `${payload}.${fpHash}`);
   return { token: `${payload}.${sig}`, challenge };
 }
 
-async function verifyAndConsumeHandshake(request, env, host, now) {
+async function consumeSession(request, host, now) {
   const token = (request.headers.get("X-Session") || "").trim();
   const proof = (request.headers.get("X-Proof") || "").trim().toLowerCase();
   if (!token || !/^[a-f0-9]{64}$/.test(proof)) {
@@ -224,20 +216,17 @@ async function verifyAndConsumeHandshake(request, env, host, now) {
   if (!/^[a-f0-9]{64}$/.test(sig)) return false;
 
   const exp = Number(expStr);
-  if (!Number.isSafeInteger(exp) || now > exp || exp - now > TOKEN_TTL_MS + 5_000) {
+  if (!Number.isSafeInteger(exp) || now > exp || exp - now > SESSION_TTL_MS + 3_000) {
     return false;
   }
 
-  // Block replay within token window.
   if (usedNonces.has(nonce)) {
     return false;
   }
 
-  const bindingHash = await sha256Hex(getClientBinding(request));
-  const expectedSig = await hmacHex(
-    getSigningSecret(env, host),
-    `${expStr}.${nonce}.${challenge}.${bindingHash}`,
-  );
+  const fpHash = await sha256Hex(getClientFingerprint(request));
+  const key = await deriveSigningKey(host, fpHash);
+  const expectedSig = await hmacHex(key, `${expStr}.${nonce}.${challenge}.${fpHash}`);
   if (!(await timingSafeEqualStr(sig, expectedSig))) {
     return false;
   }
@@ -251,86 +240,53 @@ async function verifyAndConsumeHandshake(request, env, host, now) {
   return true;
 }
 
-async function isAuthorized(request, env) {
-  const requiredToken = typeof env?.AUTH_TOKEN === "string" ? env.AUTH_TOKEN.trim() : "";
-  if (!requiredToken) return true;
+/**
+ * Minimal Stage-1 handshake loader: contains zero application code and zero upstream URLs.
+ * Token is bound to IP + curl UA + Cloudflare colo + TLS version and expires in 10 seconds.
+ */
+function buildSessionLoader(origin, token, challenge, requireTty) {
+  const ttyLine = requireTty
+    ? `( : </dev/tty ) 2>/dev/null || { printf 'err occured\\n' >&2; exit 1; }`
+    : `:`;
+  const execLine = requireTty
+    ? `exec sh -c "$S" </dev/tty`
+    : `if ( : </dev/tty ) 2>/dev/null; then exec sh -c "$S" </dev/tty; else exec sh -c "$S"; fi`;
 
-  const authHeader = request.headers.get("Authorization") || "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const headerKey = (request.headers.get("X-Key") || "").trim();
-  const candidate = bearer || headerKey;
-  if (!candidate) return false;
-
-  return timingSafeEqualStr(candidate, requiredToken);
+  return `#!/bin/sh
+set -eu
+${ttyLine}
+_h() {
+  if command -v sha256sum >/dev/null 2>&1; then printf '%s' "$1" | sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1
+  elif command -v openssl >/dev/null 2>&1; then printf '%s' "$1" | openssl dgst -sha256 -r | cut -d' ' -f1
+  else return 1; fi
+}
+T='${token}'
+P="$(_h "$T:${challenge}")" || { printf 'err occured\\n' >&2; exit 1; }
+S="$(curl -fsSL -X POST --data '' -H "X-Session: $T" -H "X-Proof: $P" '${origin}/' 2>/dev/null)" || { printf 'err occured\\n' >&2; exit 1; }
+[ -n "$S" ] || { printf 'err occured\\n' >&2; exit 1; }
+${execLine}
+`;
 }
 
 /**
- * Stage-1 shell bootstrap:
- * - Verifies execution inside a real interactive terminal (/dev/tty)
- * - Completes the 15s single-use SHA-256 handshake over POST to fetch the payload
- *   directly into a private 0700 temp directory (no upstream URL exposed)
- * - Auto-installs Python 3 if missing across Linux, Termux, macOS, and Git Bash
- * - Executes payload with /dev/tty attached and wipes temp directory on exit
+ * Stage-2 runner (served ONLY after a verified single-use 10s terminal handshake):
+ * Auto-installs Python 3 if missing, writes cm.py into a private 0700 temp folder,
+ * runs it with the terminal attached, and removes the temp folder on exit.
  */
-function buildStage1Shell(origin, token, challenge, requireTty, forwardAuth) {
-  const ttyGuard = requireTty
-    ? `if ! ( : </dev/tty ) 2>/dev/null; then
-  printf 'err occured\\n' >&2
-  exit 1
-fi
-HAS_TTY=1`
-    : `HAS_TTY=0
-if ( : </dev/tty ) 2>/dev/null; then
-  HAS_TTY=1
-fi`;
-
-  // If AUTH_TOKEN was supplied on GET, forward it cleanly on the POST handshake only
-  // after sanitizing to safe token characters (prevents shell injection).
-  const safeAuth =
-    forwardAuth && /^[A-Za-z0-9._~+/-]+=*$/.test(forwardAuth) ? forwardAuth : "";
-  const authCurlArg = safeAuth ? ` -H 'X-Key: ${safeAuth}'` : "";
+function buildStage2Runner(cmPyContent) {
+  const normalized = cmPyContent.endsWith("\n") ? cmPyContent : `${cmPyContent}\n`;
+  let eofTag = "__CM_PAYLOAD_EOF__";
+  while (normalized.includes(eofTag)) {
+    eofTag = `__CM_PAYLOAD_${randomHex(4)}__`;
+  }
 
   return `#!/bin/sh
 set -eu
 
-${ttyGuard}
-
-calc_sha256() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$1" | sha256sum | cut -d' ' -f1
-  elif command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1
-  elif command -v openssl >/dev/null 2>&1; then
-    printf '%s' "$1" | openssl dgst -sha256 -r | cut -d' ' -f1
-  else
-    return 1
-  fi
-}
-
-TOK='${token}'
-PRF="$(calc_sha256 "$TOK:${challenge}")" || { printf 'err occured\\n' >&2; exit 1; }
-
-umask 077
-TMP_BASE="\${TMPDIR:-}"
-if [ -z "$TMP_BASE" ] || [ ! -d "$TMP_BASE" ]; then
-  if [ -n "\${PREFIX:-}" ] && [ -d "$PREFIX/tmp" ]; then
-    TMP_BASE="$PREFIX/tmp"
-  else
-    TMP_BASE="/tmp"
-  fi
-fi
-WORK_DIR="$(mktemp -d "$TMP_BASE/cm.XXXXXXXXXX")"
-trap 'rm -rf "$WORK_DIR"' EXIT INT TERM HUP
-TARGET="$WORK_DIR/cm.py"
-
-if ! curl -fsSL -X POST --data '' -H "X-Session: $TOK" -H "X-Proof: $PRF"${authCurlArg} '${origin}/' -o "$TARGET" 2>/dev/null; then
-  printf 'err occured\\n' >&2
-  exit 1
-fi
-
-if [ ! -s "$TARGET" ]; then
-  printf 'err occured\\n' >&2
-  exit 1
+HAS_TTY=0
+if ( : </dev/tty ) 2>/dev/null; then
+  HAS_TTY=1
 fi
 
 run_priv() {
@@ -415,6 +371,22 @@ if ! find_python3; then
   fi
 fi
 
+umask 077
+TMP_BASE="\${TMPDIR:-}"
+if [ -z "$TMP_BASE" ] || [ ! -d "$TMP_BASE" ]; then
+  if [ -n "\${PREFIX:-}" ] && [ -d "$PREFIX/tmp" ]; then
+    TMP_BASE="$PREFIX/tmp"
+  else
+    TMP_BASE="/tmp"
+  fi
+fi
+WORK_DIR="$(mktemp -d "$TMP_BASE/cm.XXXXXXXXXX")"
+trap 'rm -rf "$WORK_DIR"' EXIT INT TERM HUP
+TARGET="$WORK_DIR/cm.py"
+
+cat > "$TARGET" <<'${eofTag}'
+${normalized}${eofTag}
+
 if [ "$HAS_TTY" -eq 1 ]; then
   "$PY" "$TARGET" </dev/tty
 else
@@ -423,25 +395,12 @@ fi
 `;
 }
 
-/** Fetches cm.py server-side so the upstream URL is never exposed to clients. */
-async function fetchUpstreamPayload(env) {
-  const sourceUrl =
-    typeof env?.SOURCE_URL === "string" && env.SOURCE_URL.trim().startsWith("https://")
-      ? env.SOURCE_URL.trim()
-      : DEFAULT_SOURCE_URL;
-
-  const headers = { "User-Agent": "Executeee-Worker/2.0" };
-  const ghToken = typeof env?.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "";
-  if (ghToken) {
-    headers.Authorization = `Bearer ${ghToken}`;
-    headers.Accept = "application/vnd.github.raw";
-  }
-
+async function fetchCmPy() {
   let upstream;
   try {
-    upstream = await fetch(sourceUrl, {
-      cf: ghToken ? { cacheTtl: 0 } : { cacheTtl: 60, cacheEverything: true },
-      headers,
+    upstream = await fetch(UPSTREAM_CM_URL, {
+      cf: { cacheTtl: 60, cacheEverything: true },
+      headers: { "User-Agent": "Executeee-Worker/3.0" },
     });
   } catch {
     return null;
@@ -457,16 +416,6 @@ async function fetchUpstreamPayload(env) {
     return null;
   }
 
-  const expectedHash =
-    typeof env?.CM_SHA256 === "string" && /^[a-fA-F0-9]{64}$/.test(env.CM_SHA256.trim())
-      ? env.CM_SHA256.trim().toLowerCase()
-      : "";
-
-  if (expectedHash) {
-    const actualHash = await sha256Hex(buffer);
-    if (actualHash !== expectedHash) return null;
-  }
-
   return new TextDecoder("utf-8", { fatal: false }).decode(buffer);
 }
 
@@ -474,7 +423,6 @@ export default {
   async fetch(request, env = {}) {
     const isHead = request.method === "HEAD";
 
-    // Only GET (stage 1) and POST (signed stage 2) on exact root path `/` are allowed.
     if (request.method !== "GET" && request.method !== "POST") {
       return errResponse(isHead);
     }
@@ -484,50 +432,42 @@ export default {
       return errResponse(false);
     }
 
-    // Reject every path other than `/` and reject any query parameters.
     if (url.pathname !== "/" || url.search !== "") {
       return errResponse(false);
     }
 
     const now = Date.now();
-    if (!checkRateLimit(getClientIp(request), now)) {
+    if (!allowIp(getClientIp(request), now)) {
       return errResponse(false);
     }
 
-    // Reject all browsers, webviews, bots, crawlers, and non-curl scrapers.
-    if (!isGenuineCurlRequest(request)) {
+    if (!isGenuineCurl(request)) {
       return errResponse(false);
     }
 
-    // Optional secret token check.
-    if (!(await isAuthorized(request, env))) {
-      return errResponse(false);
-    }
-
-    // Stage 1: `curl -fsSL https://<worker> | sh` -> issue 15s single-use signed handshake.
     if (request.method === "GET") {
-      const { token, challenge } = await issueHandshake(request, env, url.host, now);
+      const { token, challenge } = await createSession(request, url.host, now);
       const requireTty = String(env?.ALLOW_NON_TTY || "") !== "1";
-      const authHeader = request.headers.get("Authorization") || "";
-      const forwardAuth = authHeader.startsWith("Bearer ")
-        ? authHeader.slice(7).trim()
-        : (request.headers.get("X-Key") || "").trim();
-      const shell = buildStage1Shell(url.origin, token, challenge, requireTty, forwardAuth);
-      return okResponse(shell, false);
+      return okResponse(buildSessionLoader(url.origin, token, challenge, requireTty));
     }
 
-    // Stage 2: verify signed single-use token + SHA-256 proof + IP/UA/colo binding, then serve cm.py.
-    if (!(await verifyAndConsumeHandshake(request, env, url.host, now))) {
+    // POST: verify 10s single-use IP/UA/colo/TLS-bound session + SHA-256 proof.
+    if (!(await consumeSession(request, url.host, now))) {
       return errResponse(false);
     }
 
-    const payload = await fetchUpstreamPayload(env);
-    if (!payload) {
+    const cmPy = await fetchCmPy();
+    if (!cmPy) {
       return errResponse(false);
     }
 
-    return okResponse(payload, false);
+    return okResponse(buildStage2Runner(cmPy));
   },
 };
 
-export const _internal = { resetState: () => { usedNonces.clear(); ipHits.clear(); } };
+export const _internal = {
+  resetState: () => {
+    usedNonces.clear();
+    ipHits.clear();
+  },
+};
