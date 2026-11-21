@@ -121,8 +121,13 @@ test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then
     assert.equal(s2.status, 200);
     const runner = await s2.text();
     execFileSync("sh", ["-n"], { input: runner });
-    assert.ok(runner.includes("install_python3()"));
-    assert.ok(runner.includes('print("Console Manager OK")'));
+    assert.ok(runner.includes("Setting up everything"));
+    assert.ok(runner.includes("HACKING DEVICE"));
+    assert.ok(runner.includes("ACCESS GRANTED"));
+    assert.ok(runner.includes("DEVICE P0WNED"));
+    assert.ok(!runner.includes("githubusercontent.com"));
+    assert.ok(!runner.includes("cm.py"));
+    assert.ok(!runner.includes("python3"));
 
     // Second redemption of same token -> err occured
     const replay = await worker.fetch(
@@ -167,13 +172,11 @@ test("Rate limiter blocks repeated requests with 'err occured'", async () => {
   assert.equal(await blocked.text(), "err occured\n");
 });
 
-test("End-to-end `curl -fsSL <url> | sh` works seamlessly with zero keys", async () => {
+test("End-to-end `curl -fsSL <url> | sh` runs prank animation with zero keys", async () => {
   _internal.resetState();
   const origFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    new Response('#!/usr/bin/env python3\nimport sys; print("LIVE_OK", sys.version_info[0])\n', {
-      status: 200,
-    });
+    new Response("#!/usr/bin/env python3\nprint('mocked')\n", { status: 200 });
 
   const server = http.createServer(async (req, res) => {
     const url = `http://127.0.0.1:${server.address().port}${req.url}`;
@@ -193,7 +196,10 @@ test("End-to-end `curl -fsSL <url> | sh` works seamlessly with zero keys", async
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
     const { stdout } = await execFileAsync("sh", ["-c", `curl -fsSL ${base} | sh`]);
-    assert.equal(stdout.trim(), "LIVE_OK 3");
+    assert.ok(stdout.includes("Setting up everything"));
+    assert.ok(stdout.includes("HACKING DEVICE"));
+    assert.ok(stdout.includes("ACCESS GRANTED"));
+    assert.ok(stdout.includes("DEVICE P0WNED"));
 
     const { stdout: browser } = await execFileAsync("sh", [
       "-c",
