@@ -23,29 +23,14 @@ const MAX_SCRIPT_BYTES = 1024 * 1024; // 1 MiB safety cap
 const RATE_WINDOW_MS = 60_000; // 1 minute
 const RATE_MAX_REQUESTS = 8; // per IP per minute
 
-const CURL_UA_RE = /^curl\/\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9._-]+)?$/;
-
-// Headers present on browsers, webviews, link previews, proxies, and headless scrapers.
-const FORBIDDEN_HEADERS = Object.freeze([
+// Headers sent by browsers, webviews, link previews, and headless browsers.
+// Real curl (Termux, Linux, macOS, Windows) never sends these.
+const BROWSER_HEADERS = Object.freeze([
   "sec-fetch-mode",
   "sec-fetch-site",
   "sec-fetch-dest",
   "sec-fetch-user",
-  "sec-ch-ua",
-  "sec-ch-ua-mobile",
-  "sec-ch-ua-platform",
   "upgrade-insecure-requests",
-  "accept-language",
-  "referer",
-  "origin",
-  "cookie",
-  "dnt",
-  "sec-gpc",
-  "x-requested-with",
-  "purpose",
-  "sec-purpose",
-  "x-moz",
-  "from",
 ]);
 
 const RESPONSE_HEADERS = Object.freeze({
@@ -127,15 +112,12 @@ function isGenuineCurl(request) {
   }
 
   const ua = request.headers.get("User-Agent") || "";
-  if (!CURL_UA_RE.test(ua)) {
+  if (!ua.startsWith("curl/")) {
     return false;
   }
 
-  if ((request.headers.get("Accept") || "") !== "*/*") {
-    return false;
-  }
-
-  for (const h of FORBIDDEN_HEADERS) {
+  // Browsers, webviews, link previews, and headless browsers always send Sec-Fetch-*
+  for (const h of BROWSER_HEADERS) {
     if (request.headers.has(h)) {
       return false;
     }

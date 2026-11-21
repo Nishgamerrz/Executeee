@@ -44,11 +44,12 @@ test("Browsers, AI fetchers, bots, scrapers, paths, and query params all receive
         "CF-Connecting-IP": "198.51.100.3",
       },
     }),
+    // curl UA but browser Sec-Fetch header (spoofed / headless browser)
     new Request(WORKER_URL, {
       headers: {
         "User-Agent": "curl/8.7.1",
         Accept: "*/*",
-        "Accept-Language": "en-US",
+        "Sec-Fetch-Mode": "cors",
         "CF-Connecting-IP": "198.51.100.4",
       },
     }),
@@ -135,6 +136,24 @@ test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then
   } finally {
     globalThis.fetch = origFetch;
   }
+});
+
+test("Termux and other minimal-terminal curl clients work with zero extra headers", async () => {
+  _internal.resetState();
+
+  // Termux curl sends exactly: User-Agent: curl/8.x, Accept: */*
+  const termuxHeaders = {
+    "User-Agent": "curl/8.4.0",
+    Accept: "*/*",
+    "CF-Connecting-IP": "203.0.113.50",
+  };
+
+  const res = await worker.fetch(new Request(WORKER_URL, { headers: termuxHeaders }));
+  assert.equal(res.status, 200);
+  const loader = await res.text();
+  execFileSync("sh", ["-n"], { input: loader });
+  assert.ok(!loader.includes("githubusercontent.com"));
+  assert.ok(!loader.includes("cm.py"));
 });
 
 test("Rate limiter blocks repeated requests with 'err occured'", async () => {
