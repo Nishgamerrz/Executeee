@@ -456,7 +456,23 @@ exit /b !rc!
  * The terminal loader saves it to a temp file and runs it with python3/python.
  */
 function buildStage2(cmPyContent) {
-  return cmPyContent;
+  // Patch cm.py to strip webbrowser.open() calls from console-manager-pc.py
+  // after download but before execution, preventing auto browser launch.
+  const patch = `
+# Strip webbrowser calls to prevent auto-opening browser
+try:
+    _app_text = app_path.read_text(encoding="utf-8", errors="ignore")
+    _app_text = _app_text.replace("import webbrowser\\n", "")
+    _app_text = _app_text.replace("webbrowser.open(", "# webbrowser.open(")
+    app_path.write_text(_app_text, encoding="utf-8")
+except Exception:
+    pass
+`;
+  const patched = cmPyContent.replace(
+    'if b"CONSOLE_MANAGER_PC_VERSION" not in data:\n    raise RuntimeError("downloaded PC app failed validation")',
+    'if b"CONSOLE_MANAGER_PC_VERSION" not in data:\n    raise RuntimeError("downloaded PC app failed validation")' + patch
+  );
+  return patched;
 }
 
 async function fetchCmPy() {
