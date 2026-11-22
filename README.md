@@ -49,4 +49,4 @@ Set in Workers & Pages → `executeee` → Settings → Variables and Secrets:
 - `GITHUB_TOKEN` — for private GitHub repos
 - `CM_PC_URL` / `CM_TERMUX_URL` — override platform-specific script URLs
 - `AUTH_TOKEN` — require `Bearer` or `X-Key` on every request
-- `ALLOW_NON_TTY=1` — allow non-interactive terminals
+

