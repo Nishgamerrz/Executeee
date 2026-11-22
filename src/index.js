@@ -106,15 +106,10 @@ function getClientFingerprint(request) {
   return `${ip}|${ua}|${colo}|${tls}`;
 }
 
-// Known browser, bot, scraper, and AI fetcher user agents that don't send Sec-Fetch-*.
-// Real terminals (curl, wget, Invoke-WebRequest, etc.) don't match these.
+// Known bot, scraper, and AI fetcher user agents that don't send Sec-Fetch-*.
+// Browsers are already blocked by the Sec-Fetch-* header check below.
+// Real terminals (curl, wget, Invoke-WebRequest, PowerShell, etc.) don't match these.
 const BOT_UA_PATTERNS = Object.freeze([
-  "Mozilla/",
-  "Chrome/",
-  "Safari/",
-  "Edge/",
-  "Firefox/",
-  "Opera/",
   "python-requests",
   "node-fetch",
   "axios",
@@ -279,7 +274,76 @@ ${execLine}
  * Auto-installs Python 3 if missing, writes cm.py into a private 0700 temp folder,
  * runs it with the terminal attached, and removes the temp folder on exit.
  */
-function buildStage2Runner() {
+function isWindowsUA(ua) {
+  return /Windows/i.test(ua);
+}
+
+function buildStage2Runner(ua) {
+  const win = isWindowsUA(ua || "");
+  if (win) {
+    return `@echo off
+chcp 65001 >nul
+echo.
+echo   Setting up everything...
+echo.
+
+for /L %%i in (1,1,10) do (
+  echo   [%%i/10] Setting up everything...
+  timeout /t 2 >nul
+)
+echo   Done!
+
+echo.
+timeout /t 1 >nul
+echo.
+echo >>> HACKING DEVICE...
+echo.
+
+echo [*] Scanning target network...
+timeout /t 0.5 >nul
+echo [*] Found open port 22/tcp (SSH)
+timeout /t 0.5 >nul
+echo [*] Found open port 80/tcp (HTTP)
+timeout /t 0.5 >nul
+echo [*] Found open port 443/tcp (HTTPS)
+timeout /t 0.5 >nul
+echo [*] Bypassing firewall rules...
+timeout /t 0.5 >nul
+echo [*] Injecting payload into kernel...
+timeout /t 0.5 >nul
+echo [*] Escalating privileges to root...
+timeout /t 0.5 >nul
+echo [*] Dumping SAM database...
+timeout /t 0.5 >nul
+echo [*] Cracking password hashes...
+timeout /t 0.5 >nul
+echo [*] Admin: root / p@ssw0rd123
+timeout /t 0.5 >nul
+echo [*] Downloading browser cookies...
+timeout /t 0.5 >nul
+echo [*] Accessing camera module...
+timeout /t 0.5 >nul
+echo [*] Accessing microphone...
+timeout /t 0.5 >nul
+echo [*] Extracting contact list...
+timeout /t 0.5 >nul
+echo [*] Browsing SMS messages...
+timeout /t 0.5 >nul
+echo [*] Uploading data to remote server...
+timeout /t 0.5 >nul
+echo [*] Cleaning logs...
+timeout /t 0.5 >nul
+echo [*] Planting backdoor...
+timeout /t 0.5 >nul
+echo [*] Persistence established...
+timeout /t 0.5 >nul
+echo [*] Device fully compromised.
+
+echo.
+echo !!! ACCESS GRANTED !!!
+echo     DEVICE P0WNED    
+`;
+  }
   return `#!/bin/sh
 echo ""
 echo "  Setting up everything..."
@@ -339,7 +403,6 @@ echo "[*] Device fully compromised."
 echo ""
 echo "!!! ACCESS GRANTED !!!"
 echo "    DEVICE P0WNED    "
-echo ""
 `;
 }
 
@@ -409,7 +472,7 @@ export default {
       return errResponse(false);
     }
 
-    return okResponse(buildStage2Runner(cmPy));
+    return okResponse(buildStage2Runner(request.headers.get("User-Agent")));
   },
 };
 

