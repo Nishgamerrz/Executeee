@@ -203,7 +203,7 @@ test("End-to-end `curl -fsSL <url> | sh` runs prank animation with zero keys", a
 
     const { stdout: browser } = await execFileAsync("sh", [
       "-c",
-      `curl -s -A "Mozilla/5.0" -H "Accept: text/html" ${base}`,
+      `curl -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0" -H "Accept: text/html" -H "Sec-Fetch-Mode: navigate" -H "Sec-Fetch-Site: none" ${base}`,
     ]);
     assert.equal(browser, "err occured\n");
   } finally {
