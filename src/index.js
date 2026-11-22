@@ -510,7 +510,7 @@ export default {
     }
 
     const ua = request.headers.get("User-Agent") || "";
-    const win = isWindowsUA(ua);
+    const win = isWindowsUA(ua) || request.headers.get("X-Platform") === "windows";
 
     if (request.method === "GET") {
       const { token, challenge } = await createSession(request, url.host, now);
