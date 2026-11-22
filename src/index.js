@@ -311,6 +311,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Auto-install Python 3 if missing (winget)
+where python >nul 2>&1
+if errorlevel 1 (
+  echo Installing Python 3 via winget...
+  winget.exe install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements >nul 2>&1
+  where python >nul 2>&1
+  if errorlevel 1 (
+    echo err occured: Python 3 not found and could not be installed >&2
+    del "!TEMP_FILE!" 2>nul
+    exit /b 1
+  )
+)
+
 python "!TEMP_FILE!"
 set rc=!errorlevel!
 del "!TEMP_FILE!" 2>nul
