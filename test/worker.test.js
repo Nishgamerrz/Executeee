@@ -169,6 +169,7 @@ test("Windows CMD loader is valid batch syntax", async () => {
   assert.ok(loader.includes("@echo off"));
   assert.ok(loader.includes("powershell"));
   assert.ok(loader.includes("python"));
+  assert.ok(loader.includes("set \"ORIGIN="));
   assert.ok(!loader.includes("githubusercontent.com"));
   assert.ok(!loader.includes("CONSOLE_MANAGER"));
 });

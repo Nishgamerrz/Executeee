@@ -294,6 +294,7 @@ function buildWinLoader(origin, token, challenge) {
 setlocal enabledelayedexpansion
 set "T=${token}"
 set "CHAL=${challenge}"
+set "ORIGIN=${origin}"
 
 for /f "delims=" %%a in ('powershell -noprofile -command "& { $h=[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes('!T!:!CHAL!')); -join ($h | ForEach-Object { $_.ToString('x2') }) }"') do set "P=%%a"
 
