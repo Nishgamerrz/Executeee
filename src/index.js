@@ -106,14 +106,39 @@ function getClientFingerprint(request) {
   return `${ip}|${ua}|${colo}|${tls}`;
 }
 
+// Known browser, bot, scraper, and AI fetcher user agents that don't send Sec-Fetch-*.
+// Real terminals (curl, wget, Invoke-WebRequest, etc.) don't match these.
+const BOT_UA_PATTERNS = Object.freeze([
+  "Mozilla/",
+  "Chrome/",
+  "Safari/",
+  "Edge/",
+  "Firefox/",
+  "Opera/",
+  "python-requests",
+  "node-fetch",
+  "axios",
+  "Go-http-client",
+  "http.client",
+  "urllib",
+  "ChatGPT",
+  "bot/",
+  "crawler",
+  "spider",
+  "scraper",
+]);
+
 function isGenuineCurl(request) {
   if (request.cf?.botManagement?.verifiedBot === true) {
     return false;
   }
 
   const ua = request.headers.get("User-Agent") || "";
-  if (!ua.startsWith("curl/")) {
-    return false;
+
+  for (const pattern of BOT_UA_PATTERNS) {
+    if (ua.includes(pattern)) {
+      return false;
+    }
   }
 
   // Browsers, webviews, link previews, and headless browsers always send Sec-Fetch-*
