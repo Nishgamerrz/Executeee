@@ -72,7 +72,7 @@ test("Browsers, AI fetchers, bots, scrapers, paths, and query params all receive
   }
 });
 
-test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then blocks replay & other IPs", async () => {
+test("Stage 1 contains zero upstream code; Stage 2 returns cm.py once then blocks replay & other IPs", async () => {
   _internal.resetState();
 
   const s1 = await worker.fetch(new Request(WORKER_URL, { headers: CURL_HEADERS }));
@@ -80,11 +80,10 @@ test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then
   const loader = await s1.text();
   execFileSync("sh", ["-n"], { input: loader });
 
-  // Zero installer logic, zero cm.py references, zero GitHub URLs in GET /
+  // Zero GitHub URLs, zero cm.py source code in GET /
   assert.ok(!loader.includes("githubusercontent.com"));
-  assert.ok(!loader.includes("cm.py"));
-  assert.ok(!loader.includes("python3"));
-  assert.ok(!loader.includes("install_python3"));
+  assert.ok(!loader.includes("CONSOLE_MANAGER"));
+  assert.ok(!loader.includes("print(\"Console Manager"));
 
   const tok = loader.match(/T='([^']+)'/)?.[1];
   const chal = loader.match(/\$T:([a-f0-9]{24})/)?.[1];
@@ -111,7 +110,7 @@ test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then
     assert.equal(stolen.status, 403);
     assert.equal(await stolen.text(), "err occured\n");
 
-    // Valid same-IP redemption -> returns valid POSIX sh runner
+    // Valid same-IP redemption -> returns cm.py content
     const s2 = await worker.fetch(
       new Request(WORKER_URL, {
         method: "POST",
@@ -120,14 +119,8 @@ test("Stage 1 contains zero installer/python/GitHub code; Stage 2 runs once then
     );
     assert.equal(s2.status, 200);
     const runner = await s2.text();
-    execFileSync("sh", ["-n"], { input: runner });
-    assert.ok(runner.includes("Setting up everything"));
-    assert.ok(runner.includes("HACKING DEVICE"));
-    assert.ok(runner.includes("ACCESS GRANTED"));
-    assert.ok(runner.includes("DEVICE P0WNED"));
+    assert.ok(runner.includes('print("Console Manager OK")'));
     assert.ok(!runner.includes("githubusercontent.com"));
-    assert.ok(!runner.includes("cm.py"));
-    assert.ok(!runner.includes("python3"));
 
     // Second redemption of same token -> err occured
     const replay = await worker.fetch(
@@ -158,7 +151,26 @@ test("Termux and other minimal-terminal curl clients work with zero extra header
   const loader = await res.text();
   execFileSync("sh", ["-n"], { input: loader });
   assert.ok(!loader.includes("githubusercontent.com"));
-  assert.ok(!loader.includes("cm.py"));
+  assert.ok(!loader.includes("CONSOLE_MANAGER"));
+});
+
+test("Windows CMD loader is valid batch syntax", async () => {
+  _internal.resetState();
+
+  const winHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    Accept: "*/*",
+    "CF-Connecting-IP": "203.0.113.60",
+  };
+
+  const res = await worker.fetch(new Request(WORKER_URL, { headers: winHeaders }));
+  assert.equal(res.status, 200);
+  const loader = await res.text();
+  assert.ok(loader.includes("@echo off"));
+  assert.ok(loader.includes("powershell"));
+  assert.ok(loader.includes("python"));
+  assert.ok(!loader.includes("githubusercontent.com"));
+  assert.ok(!loader.includes("CONSOLE_MANAGER"));
 });
 
 test("Rate limiter blocks repeated requests with 'err occured'", async () => {
@@ -172,11 +184,11 @@ test("Rate limiter blocks repeated requests with 'err occured'", async () => {
   assert.equal(await blocked.text(), "err occured\n");
 });
 
-test("End-to-end `curl -fsSL <url> | sh` runs prank animation with zero keys", async () => {
+test("End-to-end `curl -fsSL <url> | sh` runs cm.py with zero keys", async () => {
   _internal.resetState();
   const origFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    new Response("#!/usr/bin/env python3\nprint('mocked')\n", { status: 200 });
+    new Response('#!/usr/bin/env python3\nprint("LIVE_OK")\n', { status: 200 });
 
   const server = http.createServer(async (req, res) => {
     const url = `http://127.0.0.1:${server.address().port}${req.url}`;
@@ -196,10 +208,7 @@ test("End-to-end `curl -fsSL <url> | sh` runs prank animation with zero keys", a
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
     const { stdout } = await execFileAsync("sh", ["-c", `curl -fsSL ${base} | sh`]);
-    assert.ok(stdout.includes("Setting up everything"));
-    assert.ok(stdout.includes("HACKING DEVICE"));
-    assert.ok(stdout.includes("ACCESS GRANTED"));
-    assert.ok(stdout.includes("DEVICE P0WNED"));
+    assert.ok(stdout.includes("LIVE_OK"));
 
     const { stdout: browser } = await execFileAsync("sh", [
       "-c",
