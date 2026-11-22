@@ -400,43 +400,43 @@ echo ^>^>^> HACKING DEVICE...
 echo.
 
 echo [*] Scanning target network...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Found open port 22/tcp (SSH)
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Found open port 80/tcp (HTTP)
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Found open port 443/tcp (HTTPS)
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Bypassing firewall rules...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Injecting payload into kernel...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Escalating privileges to root...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Dumping SAM database...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Cracking password hashes...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Admin: root / p@ssw0rd123
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Downloading browser cookies...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Accessing camera module...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Accessing microphone...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Extracting contact list...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Browsing SMS messages...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Uploading data to remote server...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Cleaning logs...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Planting backdoor...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Persistence established...
-timeout /t 0.5 >nul
+timeout /t 1 >nul
 echo [*] Device fully compromised.
 
 echo.
