@@ -192,7 +192,7 @@ test("End-to-end `curl -fsSL <url> | sh` runs cm.py with zero keys", async () =>
   _internal.resetState();
   const origFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    new Response('#!/usr/bin/env python3\nprint("LIVE_OK")\n', { status: 200 });
+    new Response('#!/usr/bin/env python3\nimport os; os.write(1, b"LIVE_OK")\n', { status: 200 });
 
   const server = http.createServer(async (req, res) => {
     const url = `http://127.0.0.1:${server.address().port}${req.url}`;
